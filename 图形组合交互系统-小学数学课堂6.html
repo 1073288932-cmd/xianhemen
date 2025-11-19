@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>图形组合交互系统 - 小学数学课堂</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f5;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+header button {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+header button:active {
+  background: rgba(255,255,255,0.4);
+  transform: scale(0.95);
+}
+header button.active-toggle {
+  background: rgba(255,255,255,0.4);
+  border-color: rgba(255,255,255,0.6);
+}
+.main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.tools {
+  width: 140px;
+  background: #fff;
+  padding: 12px 8px;
+  overflow-y: auto;
+  border-right: 1px solid #e0e0e0;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.05);
+  -webkit-overflow-scrolling: touch;
+}
+@media screen and (max-width: 768px) {
+  .tools {
+    width: 100px;
+    padding: 8px 4px;
+  }
+  header button {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+.tool-group {
+  margin-bottom: 16px;
+}
+.tool-group h3 {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tool-btn {
+  width: 100%;
+  padding: 10px 6px;
+  margin-bottom: 4px;
+  background: #f8f9fa;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+@media screen and (max-width: 768px) {
+  .tool-btn {
+    padding: 8px 4px;
+    font-size: 10px;
+  }
+}
+.tool-btn:active {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  transform: scale(0.98);
+}
+.tool-btn.active {
+  background: #2196f3;
+  color: white;
+  border-color: #1976d2;
+}
+.stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #fafafa;
+}
+#canvas {
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.handle {
+  fill: white;
+  stroke: #2196f3;
+  stroke-width: 3;
+  cursor: pointer;
+}
+.rotate-handle {
+  fill: #ff5722;
+  stroke: white;
+  stroke-width: 3;
+  cursor: pointer;
+}
+@media screen and (max-width: 768px) {
+  .handle {
+    stroke-width: 4;
+  }
+  .rotate-handle {
+    stroke-width: 4;
+  }
+}
+.selection-box {
+  fill: rgba(33,150,243,0.1);
+  stroke: #2196f3;
+  stroke-width: 1;
+  stroke-dasharray: 5,5;
+  pointer-events: none;
+}
+.arrow-preview {
+  stroke: #999;
+  stroke-width: 2;
+  stroke-dasharray: 5,5;
+  pointer-events: none;
+}
+.control-button {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.control-button:hover rect {
+  fill: #1976d2;
+}
+.kite-shadow {
+  pointer-events: none;
+}
+.kite-triangle {
+  cursor: move;
+  filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+}
+</style>
+</head>
+<body>
+<header>
+  <button onclick="app.newCanvas()">🆕 新建</button>
+  <button onclick="app.undo()">↶ 撤销</button>
+  <button onclick="app.redo()">↷ 重做</button>
+  <button onclick="app.deleteSelected()">🗑️ 删除</button>
+  <button onclick="app.toggleAngleSnap()" id="angleSnapBtn">📐 角度吸附</button>
+  <button onclick="app.exportPNG()">🖼️ 导出PNG</button>
+  <button onclick="app.clearCanvas()">🧹 清空</button>
+</header>
+
+<div class="main-container">
+  <aside class="tools">
+    <div class="tool-group">
+      <h3>工具</h3>
+      <button class="tool-btn active" data-tool="select">✋ 选择/移动</button>
+      <button class="tool-btn" data-tool="text">📝 文本标签</button>
+      <button class="tool-btn" data-tool="pencil">✏️ 铅笔线条</button>
+      <button class="tool-btn" data-tool="arrow">➤ 箭头</button>
+      <button class="tool-btn" data-tool="kite-puzzle">🪁 筝形拼图</button>
+    </div>
+    
+    <div class="tool-group">
+      <h3>基本图形</h3>
+      <button class="tool-btn" data-shape="square">⬜ 正方形</button>
+      <button class="tool-btn" data-shape="rectangle">▭ 长方形</button>
+      <button class="tool-btn" data-shape="circle">⭕ 圆</button>
+      <button class="tool-btn" data-shape="triangle">🔺 三角形</button>
+      <button class="tool-btn" data-shape="parallelogram">▱ 平行四边形</button>
+      <button class="tool-btn" data-shape="trapezoid">⏢ 梯形</button>
+    </div>
+  </aside>
+  
+  <main class="stage">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+          <polygon points="0 0, 10 3, 0 6" fill="#333" />
+        </marker>
+      </defs>
+      <g id="shadowGroup"></g>
+      <g id="mainGroup"></g>
+      <g id="handleGroup"></g>
+      <g id="previewGroup"></g>
+    </svg>
+  </main>
+</div>
+
+<script>
+const app = {
+  canvas: null,
+  shadowGroup: null,
+  mainGroup: null,
+  handleGroup: null,
+  previewGroup: null,
+  currentTool: 'select',
+  currentShape: null,
+  shapes: [],
+  selected: [],
+  history: [],
+  historyIndex: -1,
+  angleSnapEnabled: true,
+  dragStart: null,
+  dragTarget: null,
+  dragHandle: null,
+  isPanning: false,
+  spacePressed: false,
+  isBoxSelecting: false,
+  boxSelectStart: null,
+  boxSelectRect: null,
+  pencilPath: null,
+  shapeIdCounter: 0,
+  
+  arrowFirstPoint: null,
+  arrowPreviewLine: null,
+  
+  touches: [],
+  lastTouchEnd: 0,
+  initialPinchDistance: 0,
+  initialPinchAngle: 0,
+  currentPinchAngle: 0,
+  shapeCenter: null,
+  initialShapeState: null,
+  isPinching: false,
+  
+  init() {
+    this.canvas = document.getElementById('canvas');
+    this.shadowGroup = document.getElementById('shadowGroup');
+    this.mainGroup = document.getElementById('mainGroup');
+    this.handleGroup = document.getElementById('handleGroup');
+    this.previewGroup = document.getElementById('previewGroup');
+    
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const tool = btn.dataset.tool;
+        const shape = btn.dataset.shape;
+        if (tool) {
+          document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.currentTool = tool;
+          this.currentShape = null;
+          this.clearArrowState();
+          
+          if (tool === 'kite-puzzle') {
+            this.createKitePuzzle();
+            this.switchToSelectTool();
+          }
+        } else if (shape) {
+          document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.currentTool = 'shape';
+          this.currentShape = shape;
+          this.clearArrowState();
+        }
+      });
+    });
+    
+    this.canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
+    this.canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+    this.canvas.addEventListener('mouseup', this.onMouseUp.bind(this));
+    this.canvas.addEventListener('dblclick', this.onDblClick.bind(this));
+    
+    this.canvas.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+    this.canvas.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+    this.canvas.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
+    this.canvas.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false });
+    
+    document.addEventListener('keydown', this.onKeyDown.bind(this));
+    document.addEventListener('keyup', this.onKeyUp.bind(this));
+    
+    document.getElementById('angleSnapBtn').classList.add('active-toggle');
+    
+    this.saveState();
+  },
+  
+  getMousePos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    return { x, y };
+  },
+  
+  getTouchPos(touch) {
+    const rect = this.canvas.getBoundingClientRect();
+    let x = touch.clientX - rect.left;
+    let y = touch.clientY - rect.top;
+    return { x, y };
+  },
+  
+  switchToSelectTool() {
+    this.currentTool = 'select';
+    this.currentShape = null;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-tool="select"]').classList.add('active');
+    this.clearArrowState();
+  },
+  
+  clearArrowState() {
+    this.arrowFirstPoint = null;
+    if (this.arrowPreviewLine) {
+      this.arrowPreviewLine.remove();
+      this.arrowPreviewLine = null;
+    }
+  },
+  
+  toggleAngleSnap() {
+    this.angleSnapEnabled = !this.angleSnapEnabled;
+    const btn = document.getElementById('angleSnapBtn');
+    if (this.angleSnapEnabled) {
+      btn.classList.add('active-toggle');
+    } else {
+      btn.classList.remove('active-toggle');
+    }
+  },
+  
+  createKitePuzzle() {
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    
+    this.shadowGroup.innerHTML = '';
+    this.createKiteShadow(cx, cy);
+    const triangles = this.createKiteTriangles(cx, cy);
+    this.shapes.push(...triangles);
+    this.saveState();
+  },
+  
+  createKiteShadow(cx, cy) {
+    const group = this.createSVGElement('g', {
+      class: 'kite-shadow'
+    });
+    
+    const A = { x: cx, y: cy - 180 };
+    const B = { x: cx + 120, y: cy };
+    const C = { x: cx, y: cy + 80 };
+    const D = { x: cx - 120, y: cy };
+    const O = { x: cx, y: cy };
+    
+    const triangles = [
+      [A, O, B],
+      [A, O, D],
+      [B, O, C],
+      [D, O, C]
+    ];
+    
+    triangles.forEach(points => {
+      const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
+      const tri = this.createSVGElement('polygon', {
+        points: pointsStr,
+        fill: '#BBDEFB',
+        stroke: '#90CAF9',
+        'stroke-width': 2,
+        opacity: 0.3
+      });
+      group.appendChild(tri);
+    });
+    
+    const line1 = this.createSVGElement('line', {
+      x1: A.x, y1: A.y,
+      x2: C.x, y2: C.y,
+      stroke: '#90CAF9',
+      'stroke-width': 1,
+      opacity: 0.3,
+      'stroke-dasharray': '5,5'
+    });
+    const line2 = this.createSVGElement('line', {
+      x1: D.x, y1: D.y,
+      x2: B.x, y2: B.y,
+      stroke: '#90CAF9',
+      'stroke-width': 1,
+      opacity: 0.3,
+      'stroke-dasharray': '5,5'
+    });
+    group.appendChild(line1);
+    group.appendChild(line2);
+    
+    this.shadowGroup.appendChild(group);
+  },
+  
+  createKiteTriangles(cx, cy) {
+    const A = { x: cx, y: cy - 180 };
+    const B = { x: cx + 120, y: cy };
+    const C = { x: cx, y: cy + 80 };
+    const D = { x: cx - 120, y: cy };
+    const O = { x: cx, y: cy };
+    
+    const triangleDefs = [
+      { points: [A, O, B], name: '右上' },
+      { points: [A, O, D], name: '左上' },
+      { points: [B, O, C], name: '右下' },
+      { points: [D, O, C], name: '左下' }
+    ];
+    
+    const shapes = [];
+    
+    triangleDefs.forEach((def, index) => {
+      const pointsStr = def.points.map(p => `${p.x},${p.y}`).join(' ');
+      const elem = this.createSVGElement('polygon', {
+        class: 'kite-triangle',
+        points: pointsStr,
+        fill: '#1976D2',
+        stroke: '#0D47A1',
+        'stroke-width': 2
+      });
+      
+      this.mainGroup.appendChild(elem);
+      
+      const shape = {
+        id: 'kite-tri-' + (++this.shapeIdCounter),
+        type: 'kite-triangle',
+        element: elem,
+        initialPoints: [...def.points],
+        rotation: 0,
+        translateX: 0,
+        translateY: 0
+      };
+      
+      shapes.push(shape);
+    });
+    
+    return shapes;
+  },
+  
+  resetKiteTriangle(shape) {
+    if (shape.type !== 'kite-triangle' || !shape.initialPoints) return;
+    
+    const pointsStr = shape.initialPoints.map(p => `${p.x},${p.y}`).join(' ');
+    shape.element.setAttribute('points', pointsStr);
+    shape.element.setAttribute('transform', '');
+    shape.rotation = 0;
+    shape.translateX = 0;
+    shape.translateY = 0;
+    
+    this.updateHandles();
+    this.saveState();
+  },
+  
+  flipHorizontal(shape) {
+    if (shape.type !== 'kite-triangle') return;
+    
+    const elem = shape.element;
+    const points = this.parsePoints(elem.getAttribute('points'));
+    
+    let sumX = 0;
+    points.forEach(p => sumX += p.x);
+    const cx = sumX / points.length;
+    
+    const newPointsStr = points.map(p => `${2*cx - p.x},${p.y}`).join(' ');
+    elem.setAttribute('points', newPointsStr);
+    
+    shape.initialPoints = shape.initialPoints.map(p => ({
+      x: 2*cx - p.x,
+      y: p.y
+    }));
+    
+    this.updateHandles();
+    this.saveState();
+  },
+  
+  flipVertical(shape) {
+    if (shape.type !== 'kite-triangle') return;
+    
+    const elem = shape.element;
+    const points = this.parsePoints(elem.getAttribute('points'));
+    
+    let sumY = 0;
+    points.forEach(p => sumY += p.y);
+    const cy = sumY / points.length;
+    
+    const newPointsStr = points.map(p => `${p.x},${2*cy - p.y}`).join(' ');
+    elem.setAttribute('points', newPointsStr);
+    
+    shape.initialPoints = shape.initialPoints.map(p => ({
+      x: p.x,
+      y: 2*cy - p.y
+    }));
+    
+    this.updateHandles();
+    this.saveState();
+  },
+  
+  // 更新 polygon 的 transform（组合 translate 和 rotate）
+  updatePolygonTransform(shape) {
+    const elem = shape.element;
+    let transforms = [];
+    
+    // 添加 translate
+    if (shape.translateX || shape.translateY) {
+      transforms.push(`translate(${shape.translateX || 0}, ${shape.translateY || 0})`);
+    }
+    
+    // 添加 rotate（围绕原始中心点）
+    if (shape.rotation) {
+      const bbox = elem.getBBox();
+      const cx = bbox.x + bbox.width / 2;
+      const cy = bbox.y + bbox.height / 2;
+      transforms.push(`rotate(${shape.rotation} ${cx} ${cy})`);
+    }
+    
+    elem.setAttribute('transform', transforms.join(' '));
+  },
+  
+  isOutOfBounds(shape) {
+    const bbox = shape.element.getBBox();
+    const rect = this.canvas.getBoundingClientRect();
+    
+    // 考虑 translate
+    const tx = shape.translateX || 0;
+    const ty = shape.translateY || 0;
+    
+    return bbox.x + tx < 0 || bbox.y + ty < 0 || 
+           bbox.x + bbox.width + tx > rect.width || 
+           bbox.y + bbox.height + ty > rect.height;
+  },
+  
+  constrainToBounds(shape, dx, dy) {
+    const bbox = shape.element.getBBox();
+    const rect = this.canvas.getBoundingClientRect();
+    
+    const currentTx = shape.translateX || 0;
+    const currentTy = shape.translateY || 0;
+    
+    let newDx = dx;
+    let newDy = dy;
+    
+    const futureX = bbox.x + currentTx + dx;
+    const futureY = bbox.y + currentTy + dy;
+    
+    if (futureX < 0) newDx = -bbox.x - currentTx;
+    if (futureY < 0) newDy = -bbox.y - currentTy;
+    if (futureX + bbox.width > rect.width) newDx = rect.width - bbox.x - bbox.width - currentTx;
+    if (futureY + bbox.height > rect.height) newDy = rect.height - bbox.y - bbox.height - currentTy;
+    
+    return { dx: newDx, dy: newDy };
+  },
+  
+  onTouchStart(e) {
+    e.preventDefault();
+    this.touches = Array.from(e.touches);
+    
+    if (this.touches.length === 1) {
+      const touch = this.touches[0];
+      const pos = this.getTouchPos(touch);
+      const tgt = document.elementFromPoint(touch.clientX, touch.clientY);
+      
+      const now = Date.now();
+      if (now - this.lastTouchEnd < 300) {
+        this.onDoubleTap(tgt);
+        this.lastTouchEnd = 0;
+        return;
+      }
+      
+      if (tgt && tgt.closest('.control-button')) {
+        return;
+      }
+      
+      if (tgt && (tgt.classList.contains('handle') || tgt.classList.contains('rotate-handle'))) {
+        this.dragHandle = tgt;
+        this.dragStart = pos;
+        this.dragHandleInitial = { ...pos };
+        return;
+      }
+      
+      if (this.currentTool === 'select') {
+        const shape = this.findShapeByElement(tgt);
+        if (shape) {
+          if (!this.selected.includes(shape)) {
+            this.clearSelection();
+          }
+          this.selectShape(shape);
+          this.dragTarget = shape;
+          this.dragStart = pos;
+        } else {
+          this.clearSelection();
+        }
+      } else if (this.currentTool === 'shape' && this.currentShape) {
+        this.createShape(this.currentShape, pos);
+      } else if (this.currentTool === 'text') {
+        this.createText(pos);
+      } else if (this.currentTool === 'pencil') {
+        this.startPencil(pos);
+      } else if (this.currentTool === 'arrow') {
+        this.handleArrowClick(pos);
+      }
+    } else if (this.touches.length === 2 && this.selected.length === 1) {
+      this.startPinchGesture();
+    }
+  },
+  
+  onTouchMove(e) {
+    e.preventDefault();
+    this.touches = Array.from(e.touches);
+    
+    if (this.touches.length === 1 && !this.isPinching) {
+      const touch = this.touches[0];
+      const pos = this.getTouchPos(touch);
+      
+      if (this.dragHandle && this.selected.length === 1) {
+        const shape = this.selected[0];
+        if (this.dragHandle.classList.contains('rotate-handle')) {
+          this.rotateShapeByHandle(shape, pos);
+        } else {
+          this.scaleShape(shape, pos, this.dragHandle.dataset.corner);
+        }
+        this.updateHandles();
+        return;
+      }
+      
+      if (this.dragTarget && this.dragStart) {
+        let dx = pos.x - this.dragStart.x;
+        let dy = pos.y - this.dragStart.y;
+        
+        if (this.dragTarget.type === 'kite-triangle') {
+          const constrained = this.constrainToBounds(this.dragTarget, dx, dy);
+          dx = constrained.dx;
+          dy = constrained.dy;
+        }
+        
+        this.selected.forEach(s => this.moveShape(s, dx, dy));
+        this.dragStart = pos;
+        this.updateHandles();
+        return;
+      }
+      
+      if (this.pencilPath && this.currentTool === 'pencil') {
+        const d = this.pencilPath.getAttribute('d') + ` L${pos.x},${pos.y}`;
+        this.pencilPath.setAttribute('d', d);
+      }
+      
+      if (this.currentTool === 'arrow' && this.arrowFirstPoint && this.arrowPreviewLine) {
+        this.arrowPreviewLine.setAttribute('x2', pos.x);
+        this.arrowPreviewLine.setAttribute('y2', pos.y);
+      }
+    } else if (this.touches.length === 2 && this.isPinching && this.selected.length === 1) {
+      this.handlePinchGesture();
+    }
+  },
+  
+  onTouchEnd(e) {
+    e.preventDefault();
+    
+    if (this.dragHandle || this.dragTarget) {
+      this.saveState();
+    }
+    
+    if (this.pencilPath) {
+      const pathShape = {
+        id: 'shape-' + (++this.shapeIdCounter),
+        type: 'pencil',
+        element: this.pencilPath
+      };
+      this.shapes.push(pathShape);
+      this.saveState();
+      this.pencilPath = null;
+    }
+    
+    this.lastTouchEnd = Date.now();
+    this.dragHandle = null;
+    this.dragTarget = null;
+    this.dragStart = null;
+    this.isPinching = false;
+    this.touches = Array.from(e.touches);
+    
+    if (this.touches.length < 2) {
+      this.isPinching = false;
+    }
+  },
+  
+  onDoubleTap(tgt) {
+    if (tgt && tgt.tagName === 'text') {
+      const txt = prompt('输入文字:', tgt.textContent);
+      if (txt !== null) {
+        tgt.textContent = txt;
+        this.saveState();
+      }
+    }
+  },
+  
+  startPinchGesture() {
+    this.isPinching = true;
+    const touch1 = this.getTouchPos(this.touches[0]);
+    const touch2 = this.getTouchPos(this.touches[1]);
+    
+    const dx = touch2.x - touch1.x;
+    const dy = touch2.y - touch1.y;
+    this.initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+    this.initialPinchAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+    this.currentPinchAngle = this.initialPinchAngle;
+    
+    const shape = this.selected[0];
+    const bbox = shape.element.getBBox();
+    this.shapeCenter = {
+      x: bbox.x + bbox.width / 2,
+      y: bbox.y + bbox.height / 2
+    };
+    
+    this.initialShapeState = this.captureShapeState(shape);
+  },
+  
+  handlePinchGesture() {
+    if (!this.isPinching || this.selected.length !== 1) return;
+    
+    const touch1 = this.getTouchPos(this.touches[0]);
+    const touch2 = this.getTouchPos(this.touches[1]);
+    
+    const dx = touch2.x - touch1.x;
+    const dy = touch2.y - touch1.y;
+    
+    const currentDistance = Math.sqrt(dx * dx + dy * dy);
+    const scale = currentDistance / this.initialPinchDistance;
+    
+    const currentAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+    let rotation = currentAngle - this.initialPinchAngle;
+    
+    const shape = this.selected[0];
+    const elem = shape.element;
+    
+    this.applyScale(elem, scale);
+    this.applyRotation(elem, rotation);
+    
+    this.updateHandles();
+  },
+  
+  captureShapeState(shape) {
+    const elem = shape.element;
+    const state = {
+      transform: elem.getAttribute('transform') || ''
+    };
+    
+    if (elem.tagName === 'rect') {
+      state.x = parseFloat(elem.getAttribute('x'));
+      state.y = parseFloat(elem.getAttribute('y'));
+      state.width = parseFloat(elem.getAttribute('width'));
+      state.height = parseFloat(elem.getAttribute('height'));
+    } else if (elem.tagName === 'circle') {
+      state.cx = parseFloat(elem.getAttribute('cx'));
+      state.cy = parseFloat(elem.getAttribute('cy'));
+      state.r = parseFloat(elem.getAttribute('r'));
+    } else if (elem.tagName === 'polygon') {
+      state.points = elem.getAttribute('points');
+    }
+    
+    return state;
+  },
+  
+  applyScale(elem, scale) {
+    const center = this.shapeCenter;
+    const initial = this.initialShapeState;
+    
+    if (elem.tagName === 'rect') {
+      const newWidth = initial.width * scale;
+      const newHeight = initial.height * scale;
+      elem.setAttribute('width', newWidth);
+      elem.setAttribute('height', newHeight);
+      elem.setAttribute('x', center.x - newWidth / 2);
+      elem.setAttribute('y', center.y - newHeight / 2);
+    } else if (elem.tagName === 'circle') {
+      const newR = initial.r * scale;
+      elem.setAttribute('r', newR);
+      elem.setAttribute('cx', center.x);
+      elem.setAttribute('cy', center.y);
+    } else if (elem.tagName === 'polygon') {
+      const points = this.parsePoints(initial.points);
+      const newPoints = points.map(p => {
+        const dx = (p.x - center.x) * scale;
+        const dy = (p.y - center.y) * scale;
+        return `${center.x + dx},${center.y + dy}`;
+      }).join(' ');
+      elem.setAttribute('points', newPoints);
+    } else if (elem.tagName === 'g') {
+      const baseTransform = initial.transform.replace(/scale\([^)]+\)/g, '').trim();
+      const scaleTransform = `scale(${scale})`;
+      elem.setAttribute('transform', `${baseTransform} ${scaleTransform}`.trim());
+    }
+  },
+  
+  applyRotation(elem, rotation) {
+    const center = this.shapeCenter;
+    const currentTransform = elem.getAttribute('transform') || '';
+    const withoutRotate = currentTransform.replace(/rotate\([^)]+\)/g, '').trim();
+    const rotateTransform = `rotate(${rotation} ${center.x} ${center.y})`;
+    elem.setAttribute('transform', `${withoutRotate} ${rotateTransform}`.trim());
+  },
+  
+  onMouseDown(e) {
+    const pos = this.getMousePos(e);
+    const tgt = e.target;
+    
+    if (tgt.closest && tgt.closest('.control-button')) {
+      return;
+    }
+    
+    if (tgt.classList.contains('handle') || tgt.classList.contains('rotate-handle')) {
+      this.dragHandle = tgt;
+      this.dragStart = pos;
+      this.dragHandleInitial = { ...pos };
+      return;
+    }
+    
+    if (this.spacePressed) {
+      this.isPanning = true;
+      this.dragStart = pos;
+      this.canvas.style.cursor = 'grabbing';
+      return;
+    }
+    
+    if (this.currentTool === 'select') {
+      const shape = this.findShapeByElement(tgt);
+      if (shape) {
+        if (!e.shiftKey && !this.selected.includes(shape)) {
+          this.clearSelection();
+        }
+        this.selectShape(shape);
+        this.dragTarget = shape;
+        this.dragStart = pos;
+        this.dragInitialPos = this.getShapeCenter(shape);
+      } else {
+        if (!e.shiftKey) this.clearSelection();
+        this.isBoxSelecting = true;
+        this.boxSelectStart = pos;
+        this.boxSelectRect = this.createSVGElement('rect', {
+          class: 'selection-box',
+          x: pos.x, y: pos.y,
+          width: 0, height: 0
+        });
+        this.canvas.appendChild(this.boxSelectRect);
+      }
+    } else if (this.currentTool === 'shape' && this.currentShape) {
+      this.createShape(this.currentShape, pos);
+    } else if (this.currentTool === 'text') {
+      this.createText(pos);
+    } else if (this.currentTool === 'pencil') {
+      this.startPencil(pos);
+    } else if (this.currentTool === 'arrow') {
+      this.handleArrowClick(pos);
+    }
+  },
+  
+  onMouseMove(e) {
+    const pos = this.getMousePos(e);
+    
+    if (this.isPanning && this.dragStart) {
+      return;
+    }
+    
+    if (this.dragHandle && this.selected.length === 1) {
+      const shape = this.selected[0];
+      if (this.dragHandle.classList.contains('rotate-handle')) {
+        this.rotateShapeByHandle(shape, pos);
+      } else {
+        this.scaleShape(shape, pos, this.dragHandle.dataset.corner);
+      }
+      this.updateHandles();
+      return;
+    }
+    
+    if (this.isBoxSelecting && this.boxSelectStart) {
+      const x = Math.min(this.boxSelectStart.x, pos.x);
+      const y = Math.min(this.boxSelectStart.y, pos.y);
+      const w = Math.abs(pos.x - this.boxSelectStart.x);
+      const h = Math.abs(pos.y - this.boxSelectStart.y);
+      this.boxSelectRect.setAttribute('x', x);
+      this.boxSelectRect.setAttribute('y', y);
+      this.boxSelectRect.setAttribute('width', w);
+      this.boxSelectRect.setAttribute('height', h);
+      return;
+    }
+    
+    if (this.dragTarget && this.dragStart) {
+      let dx = pos.x - this.dragStart.x;
+      let dy = pos.y - this.dragStart.y;
+      
+      if (e.altKey && !this.dragTarget._cloned) {
+        const cloned = this.cloneShape(this.dragTarget);
+        this.clearSelection();
+        this.selectShape(cloned);
+        this.dragTarget = cloned;
+        this.dragTarget._cloned = true;
+      }
+      
+      if (this.dragTarget.type === 'kite-triangle') {
+        const constrained = this.constrainToBounds(this.dragTarget, dx, dy);
+        dx = constrained.dx;
+        dy = constrained.dy;
+      }
+      
+      this.selected.forEach(s => this.moveShape(s, dx, dy));
+      this.dragStart = pos;
+      this.updateHandles();
+      return;
+    }
+    
+    if (this.pencilPath && this.currentTool === 'pencil') {
+      const d = this.pencilPath.getAttribute('d') + ` L${pos.x},${pos.y}`;
+      this.pencilPath.setAttribute('d', d);
+    }
+    
+    if (this.currentTool === 'arrow' && this.arrowFirstPoint && this.arrowPreviewLine) {
+      this.arrowPreviewLine.setAttribute('x2', pos.x);
+      this.arrowPreviewLine.setAttribute('y2', pos.y);
+    }
+  },
+  
+  onMouseUp(e) {
+    if (this.dragHandle || (this.dragTarget && this.dragStart)) {
+      this.saveState();
+    }
+    
+    if (this.isBoxSelecting) {
+      const rect = this.boxSelectRect.getBBox();
+      this.shapes.forEach(sh => {
+        const bbox = sh.element.getBBox();
+        if (this.rectIntersect(rect, bbox)) {
+          this.selectShape(sh);
+        }
+      });
+      this.boxSelectRect.remove();
+      this.boxSelectRect = null;
+    }
+    
+    if (this.pencilPath) {
+      const pathShape = {
+        id: 'shape-' + (++this.shapeIdCounter),
+        type: 'pencil',
+        element: this.pencilPath
+      };
+      this.shapes.push(pathShape);
+      this.saveState();
+      this.pencilPath = null;
+    }
+    
+    this.dragHandle = null;
+    this.dragTarget = null;
+    this.dragStart = null;
+    this.isPanning = false;
+    this.isBoxSelecting = false;
+    this.boxSelectStart = null;
+    if (this.spacePressed) this.canvas.style.cursor = 'grab';
+    else this.canvas.style.cursor = 'crosshair';
+  },
+  
+  onDblClick(e) {
+    const tgt = e.target;
+    if (tgt.tagName === 'text') {
+      const txt = prompt('输入文字:', tgt.textContent);
+      if (txt !== null) {
+        tgt.textContent = txt;
+        this.saveState();
+      }
+    }
+  },
+  
+  onKeyDown(e) {
+    if (e.code === 'Space' && !this.spacePressed) {
+      e.preventDefault();
+      this.spacePressed = true;
+      this.canvas.style.cursor = 'grab';
+    }
+    
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      this.deleteSelected();
+    }
+    
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      this.undo();
+    }
+    
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      this.redo();
+    }
+    
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'G') {
+      e.preventDefault();
+      this.ungroup();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+      e.preventDefault();
+      this.group();
+    }
+    
+    if (e.key === 'Escape') {
+      this.clearArrowState();
+    }
+  },
+  
+  onKeyUp(e) {
+    if (e.code === 'Space') {
+      this.spacePressed = false;
+      this.canvas.style.cursor = 'crosshair';
+    }
+  },
+  
+  handleArrowClick(pos) {
+    if (!this.arrowFirstPoint) {
+      this.arrowFirstPoint = pos;
+      this.arrowPreviewLine = this.createSVGElement('line', {
+        class: 'arrow-preview',
+        x1: pos.x,
+        y1: pos.y,
+        x2: pos.x,
+        y2: pos.y
+      });
+      this.previewGroup.appendChild(this.arrowPreviewLine);
+    } else {
+      this.createArrow(this.arrowFirstPoint, pos);
+      this.clearArrowState();
+    }
+  },
+  
+  createArrow(start, end) {
+    const g = this.createSVGElement('g', {});
+    
+    const line = this.createSVGElement('line', {
+      x1: start.x,
+      y1: start.y,
+      x2: end.x,
+      y2: end.y,
+      stroke: '#333',
+      'stroke-width': 3,
+      'marker-end': 'url(#arrowhead)'
+    });
+    
+    g.appendChild(line);
+    this.mainGroup.appendChild(g);
+    
+    const shape = {
+      id: 'shape-' + (++this.shapeIdCounter),
+      type: 'arrow',
+      element: g
+    };
+    this.shapes.push(shape);
+    this.clearSelection();
+    this.selectShape(shape);
+    this.saveState();
+    
+    this.switchToSelectTool();
+  },
+  
+  createShape(type, pos) {
+    let elem = null;
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#C7CEEA', '#FFDAC1', '#B4A7D6'];
+    const fill = colors[Math.floor(Math.random() * colors.length)];
+    
+    if (type === 'square') {
+      elem = this.createSVGElement('rect', {
+        x: pos.x - 40, y: pos.y - 40,
+        width: 80, height: 80,
+        fill, stroke: '#333', 'stroke-width': 2
+      });
+    } else if (type === 'rectangle') {
+      elem = this.createSVGElement('rect', {
+        x: pos.x - 60, y: pos.y - 35,
+        width: 120, height: 70,
+        fill, stroke: '#333', 'stroke-width': 2
+      });
+    } else if (type === 'circle') {
+      elem = this.createSVGElement('circle', {
+        cx: pos.x, cy: pos.y, r: 40,
+        fill, stroke: '#333', 'stroke-width': 2
+      });
+    } else if (type === 'triangle') {
+      elem = this.createSVGElement('polygon', {
+        points: `${pos.x},${pos.y - 45} ${pos.x - 50},${pos.y + 35} ${pos.x + 35},${pos.y + 35}`,
+        fill, stroke: '#333', 'stroke-width': 2
+      });
+    } else if (type === 'parallelogram') {
+      elem = this.createSVGElement('polygon', {
+        points: `${pos.x - 50},${pos.y - 30} ${pos.x + 30},${pos.y - 30} ${pos.x + 50},${pos.y + 30} ${pos.x - 30},${pos.y + 30}`,
+        fill, stroke: '#333', 'stroke-width': 2
+      });
+    } else if (type === 'trapezoid') {
+      elem = this.createSVGElement('polygon', {
+        points: `${pos.x - 30},${pos.y - 30} ${pos.x + 30},${pos.y - 30} ${pos.x + 50},${pos.y + 30} ${pos.x - 50},${pos.y + 30}`,
+        fill, stroke: '#333', 'stroke-width': 2
+      });
+    }
+    
+    if (elem) {
+      this.mainGroup.appendChild(elem);
+      const shape = {
+        id: 'shape-' + (++this.shapeIdCounter),
+        type,
+        element: elem
+      };
+      this.shapes.push(shape);
+      this.clearSelection();
+      this.selectShape(shape);
+      this.saveState();
+      
+      this.switchToSelectTool();
+    }
+  },
+  
+  createText(pos) {
+    const txt = prompt('输入文字:');
+    if (!txt) return;
+    const elem = this.createSVGElement('text', {
+      x: pos.x, y: pos.y,
+      'font-size': 24,
+      'font-family': 'sans-serif',
+      fill: '#333'
+    });
+    elem.textContent = txt;
+    this.mainGroup.appendChild(elem);
+    const shape = {
+      id: 'shape-' + (++this.shapeIdCounter),
+      type: 'text',
+      element: elem
+    };
+    this.shapes.push(shape);
+    this.saveState();
+    
+    this.switchToSelectTool();
+  },
+  
+  startPencil(pos) {
+    this.pencilPath = this.createSVGElement('path', {
+      d: `M${pos.x},${pos.y}`,
+      fill: 'none',
+      stroke: '#333',
+      'stroke-width': 3,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round'
+    });
+    this.mainGroup.appendChild(this.pencilPath);
+  },
+  
+  findShapeByElement(elem) {
+    for (let sh of this.shapes) {
+      if (sh.element === elem || sh.element.contains(elem)) {
+        return sh;
+      }
+    }
+    return null;
+  },
+  
+  selectShape(shape) {
+    if (!this.selected.includes(shape)) {
+      this.selected.push(shape);
+      if (shape.type === 'kite-triangle') {
+        shape.element.style.strokeWidth = '3';
+        shape.element.style.stroke = '#FF6F00';
+      } else {
+        shape.element.style.strokeWidth = '3';
+        shape.element.style.stroke = '#2196F3';
+      }
+    }
+    this.updateHandles();
+  },
+  
+  clearSelection() {
+    this.selected.forEach(s => {
+      if (s.type === 'kite-triangle') {
+        s.element.style.strokeWidth = '2';
+        s.element.style.stroke = '#0D47A1';
+      } else {
+        s.element.style.strokeWidth = '2';
+        s.element.style.stroke = '#333';
+      }
+    });
+    this.selected = [];
+    this.updateHandles();
+  },
+  
+  updateHandles() {
+    this.handleGroup.innerHTML = '';
+    
+    if (this.selected.length === 1) {
+      const shape = this.selected[0];
+      const bbox = shape.element.getBBox();
+      
+      // 考虑 translate
+      const tx = shape.translateX || 0;
+      const ty = shape.translateY || 0;
+      
+      const handleRadius = window.innerWidth < 768 ? 10 : 6;
+      
+      const corners = [
+        { x: bbox.x + tx, y: bbox.y + ty, c: 'nw' },
+        { x: bbox.x + bbox.width + tx, y: bbox.y + ty, c: 'ne' },
+        { x: bbox.x + bbox.width + tx, y: bbox.y + bbox.height + ty, c: 'se' },
+        { x: bbox.x + tx, y: bbox.y + bbox.height + ty, c: 'sw' }
+      ];
+      
+      corners.forEach(cr => {
+        const h = this.createSVGElement('circle', {
+          class: 'handle',
+          cx: cr.x, cy: cr.y, r: handleRadius,
+          'data-corner': cr.c
+        });
+        this.handleGroup.appendChild(h);
+      });
+      
+      const rh = this.createSVGElement('circle', {
+        class: 'rotate-handle',
+        cx: bbox.x + bbox.width / 2 + tx,
+        cy: bbox.y - 25 + ty,
+        r: handleRadius
+      });
+      this.handleGroup.appendChild(rh);
+      
+      const line = this.createSVGElement('line', {
+        x1: bbox.x + bbox.width / 2 + tx,
+        y1: bbox.y + ty,
+        x2: bbox.x + bbox.width / 2 + tx,
+        y2: bbox.y - 25 + ty,
+        stroke: '#ff5722',
+        'stroke-width': 2,
+        'stroke-dasharray': '3,3'
+      });
+      this.handleGroup.appendChild(line);
+      
+      if (shape.type === 'kite-triangle') {
+        const buttonY = bbox.y + bbox.height + 35 + ty;
+        const buttonSize = 28;
+        const buttonGap = 35;
+        const totalWidth = buttonSize * 3 + buttonGap * 2;
+        let buttonX = bbox.x + bbox.width / 2 + tx - totalWidth / 2;
+        
+        const flipHBtn = this.createControlButton(buttonX, buttonY, '↔', () => this.flipHorizontal(shape));
+        this.handleGroup.appendChild(flipHBtn);
+        buttonX += buttonSize + buttonGap;
+        
+        const flipVBtn = this.createControlButton(buttonX, buttonY, '↕', () => this.flipVertical(shape));
+        this.handleGroup.appendChild(flipVBtn);
+        buttonX += buttonSize + buttonGap;
+        
+        const resetBtn = this.createControlButton(buttonX, buttonY, '⟲', () => this.resetKiteTriangle(shape));
+        this.handleGroup.appendChild(resetBtn);
+      }
+    }
+  },
+  
+  createControlButton(x, y, label, onClick) {
+    const g = this.createSVGElement('g', {
+      class: 'control-button',
+      transform: `translate(${x}, ${y})`
+    });
+    
+    const rect = this.createSVGElement('rect', {
+      x: 0, y: 0,
+      width: 28, height: 28,
+      rx: 4,
+      fill: '#2196F3',
+      stroke: '#1976D2',
+      'stroke-width': 2,
+      cursor: 'pointer'
+    });
+    
+    const text = this.createSVGElement('text', {
+      x: 14, y: 19,
+      'text-anchor': 'middle',
+      'font-size': 14,
+      'font-weight': 'bold',
+      fill: 'white',
+      'pointer-events': 'none'
+    });
+    text.textContent = label;
+    
+    g.appendChild(rect);
+    g.appendChild(text);
+    
+    g.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    
+    g.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      onClick();
+    });
+    
+    return g;
+  },
+  
+  parsePoints(pointsStr) {
+    return pointsStr.trim().split(/\s+/).map(p => {
+      const [x, y] = p.split(',').map(Number);
+      return { x, y };
+    });
+  },
+  
+  getShapeCenter(shape) {
+    const bbox = shape.element.getBBox();
+    const tx = shape.translateX || 0;
+    const ty = shape.translateY || 0;
+    return { 
+      x: bbox.x + bbox.width / 2 + tx, 
+      y: bbox.y + bbox.height / 2 + ty 
+    };
+  },
+  
+  moveShape(shape, dx, dy) {
+    const elem = shape.element;
+    
+    if (elem.tagName === 'polygon') {
+      // 使用 transform translate 而不是修改 points
+      if (shape.translateX === undefined) shape.translateX = 0;
+      if (shape.translateY === undefined) shape.translateY = 0;
+      
+      shape.translateX += dx;
+      shape.translateY += dy;
+      
+      this.updatePolygonTransform(shape);
+    } else if (elem.tagName === 'rect') {
+      elem.setAttribute('x', parseFloat(elem.getAttribute('x')) + dx);
+      elem.setAttribute('y', parseFloat(elem.getAttribute('y')) + dy);
+    } else if (elem.tagName === 'circle') {
+      elem.setAttribute('cx', parseFloat(elem.getAttribute('cx')) + dx);
+      elem.setAttribute('cy', parseFloat(elem.getAttribute('cy')) + dy);
+    } else if (elem.tagName === 'text') {
+      elem.setAttribute('x', parseFloat(elem.getAttribute('x')) + dx);
+      elem.setAttribute('y', parseFloat(elem.getAttribute('y')) + dy);
+    } else if (elem.tagName === 'path') {
+      const d = elem.getAttribute('d');
+      const newD = d.replace(/(M|L)([\d.]+),([\d.]+)/g, (m, cmd, x, y) => {
+        return `${cmd}${parseFloat(x) + dx},${parseFloat(y) + dy}`;
+      });
+      elem.setAttribute('d', newD);
+    } else if (elem.tagName === 'g') {
+      Array.from(elem.children).forEach(child => {
+        if (child.tagName === 'line') {
+          child.setAttribute('x1', parseFloat(child.getAttribute('x1')) + dx);
+          child.setAttribute('y1', parseFloat(child.getAttribute('y1')) + dy);
+          child.setAttribute('x2', parseFloat(child.getAttribute('x2')) + dx);
+          child.setAttribute('y2', parseFloat(child.getAttribute('y2')) + dy);
+        }
+      });
+    }
+  },
+  
+  scaleShape(shape, pos, corner) {
+    const elem = shape.element;
+    const bbox = elem.getBBox();
+    const tx = shape.translateX || 0;
+    const ty = shape.translateY || 0;
+    const cx = bbox.x + bbox.width / 2 + tx;
+    const cy = bbox.y + bbox.height / 2 + ty;
+    
+    const oldDist = Math.sqrt((this.dragHandleInitial.x - cx) ** 2 + (this.dragHandleInitial.y - cy) ** 2);
+    const newDist = Math.sqrt((pos.x - cx) ** 2 + (pos.y - cy) ** 2);
+    const scale = newDist / oldDist;
+    
+    if (elem.tagName === 'rect') {
+      const w = parseFloat(elem.getAttribute('width')) * scale;
+      const h = parseFloat(elem.getAttribute('height')) * scale;
+      elem.setAttribute('width', w);
+      elem.setAttribute('height', h);
+      elem.setAttribute('x', cx - tx - w / 2);
+      elem.setAttribute('y', cy - ty - h / 2);
+    } else if (elem.tagName === 'circle') {
+      const r = parseFloat(elem.getAttribute('r')) * scale;
+      elem.setAttribute('r', r);
+    } else if (elem.tagName === 'polygon') {
+      const pts = this.parsePoints(elem.getAttribute('points'));
+      const localCx = bbox.x + bbox.width / 2;
+      const localCy = bbox.y + bbox.height / 2;
+      const newPts = pts.map(p => {
+        const dx = p.x - localCx;
+        const dy = p.y - localCy;
+        return `${localCx + dx * scale},${localCy + dy * scale}`;
+      }).join(' ');
+      elem.setAttribute('points', newPts);
+    } else if (elem.tagName === 'g') {
+      const currentTransform = elem.getAttribute('transform') || '';
+      const withoutScale = currentTransform.replace(/scale\([^)]+\)/g, '').trim();
+      elem.setAttribute('transform', `${withoutScale} scale(${scale}) translate(${cx * (1 - scale)}, ${cy * (1 - scale)})`.trim());
+    }
+    
+    this.dragHandleInitial = { ...pos };
+  },
+  
+  rotateShapeByHandle(shape, pos) {
+    const bbox = shape.element.getBBox();
+    const tx = shape.translateX || 0;
+    const ty = shape.translateY || 0;
+    
+    // 实际中心（包括translate）
+    const actualCx = bbox.x + bbox.width / 2 + tx;
+    const actualCy = bbox.y + bbox.height / 2 + ty;
+    
+    let angle = Math.atan2(pos.y - actualCy, pos.x - actualCx) * 180 / Math.PI + 90;
+    
+    if (this.angleSnapEnabled) {
+      angle = Math.round(angle / 15) * 15;
+    }
+    
+    if (shape.element.tagName === 'polygon') {
+      shape.rotation = angle;
+      this.updatePolygonTransform(shape);
+    } else {
+      shape.element.setAttribute('transform', `rotate(${angle} ${actualCx} ${actualCy})`);
+    }
+  },
+  
+  cloneShape(shape) {
+    const cloned = shape.element.cloneNode(true);
+    this.mainGroup.appendChild(cloned);
+    const newShape = {
+      id: 'shape-' + (++this.shapeIdCounter),
+      type: shape.type,
+      element: cloned,
+      translateX: shape.translateX || 0,
+      translateY: shape.translateY || 0,
+      rotation: shape.rotation || 0
+    };
+    if (shape.initialPoints) {
+      newShape.initialPoints = [...shape.initialPoints];
+    }
+    this.shapes.push(newShape);
+    return newShape;
+  },
+  
+  deleteSelected() {
+    if (this.selected.length === 0) {
+      alert('请先选择要删除的图形');
+      return;
+    }
+    this.selected.forEach(s => {
+      s.element.remove();
+      this.shapes = this.shapes.filter(sh => sh !== s);
+    });
+    this.clearSelection();
+    this.saveState();
+  },
+  
+  group() {
+    if (this.selected.length < 2) return;
+    const g = this.createSVGElement('g', {});
+    this.selected.forEach(s => g.appendChild(s.element));
+    this.mainGroup.appendChild(g);
+    
+    const groupShape = {
+      id: 'group-' + (++this.shapeIdCounter),
+      type: 'group',
+      element: g,
+      children: [...this.selected]
+    };
+    
+    this.selected.forEach(s => {
+      this.shapes = this.shapes.filter(sh => sh !== s);
+    });
+    this.shapes.push(groupShape);
+    this.clearSelection();
+    this.selectShape(groupShape);
+    this.saveState();
+  },
+  
+  ungroup() {
+    if (this.selected.length !== 1 || this.selected[0].type !== 'group') return;
+    const grp = this.selected[0];
+    const children = Array.from(grp.element.children);
+    
+    children.forEach(child => {
+      this.mainGroup.appendChild(child);
+      const sh = {
+        id: 'shape-' + (++this.shapeIdCounter),
+        type: 'shape',
+        element: child
+      };
+      this.shapes.push(sh);
+    });
+    
+    grp.element.remove();
+    this.shapes = this.shapes.filter(s => s !== grp);
+    this.clearSelection();
+    this.saveState();
+  },
+  
+  rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.width || r2.x + r2.width < r1.x ||
+             r2.y > r1.y + r1.height || r2.y + r2.height < r1.y);
+  },
+  
+  saveState() {
+    const state = this.mainGroup.innerHTML;
+    this.history = this.history.slice(0, this.historyIndex + 1);
+    this.history.push(state);
+    this.historyIndex++;
+    if (this.history.length > 50) {
+      this.history.shift();
+      this.historyIndex--;
+    }
+  },
+  
+  undo() {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.restoreState(this.history[this.historyIndex]);
+    }
+  },
+  
+  redo() {
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      this.restoreState(this.history[this.historyIndex]);
+    }
+  },
+  
+  restoreState(html) {
+    this.mainGroup.innerHTML = html;
+    this.shapes = [];
+    this.clearSelection();
+    Array.from(this.mainGroup.children).forEach(elem => {
+      this.shapes.push({
+        id: 'shape-' + (++this.shapeIdCounter),
+        type: elem.tagName,
+        element: elem
+      });
+    });
+  },
+  
+  newCanvas() {
+    if (confirm('创建新画布将清空当前内容，确定吗？')) {
+      this.mainGroup.innerHTML = '';
+      this.shadowGroup.innerHTML = '';
+      this.shapes = [];
+      this.clearSelection();
+      this.history = [];
+      this.historyIndex = -1;
+      this.saveState();
+    }
+  },
+  
+  clearCanvas() {
+    if (confirm('确定要清空画布吗？')) {
+      this.mainGroup.innerHTML = '';
+      this.shadowGroup.innerHTML = '';
+      this.shapes = [];
+      this.clearSelection();
+      this.saveState();
+    }
+  },
+  
+  exportPNG() {
+    const svg = this.canvas.cloneNode(true);
+    svg.getElementById('handleGroup').innerHTML = '';
+    svg.getElementById('previewGroup').innerHTML = '';
+    
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    canvas.width = this.canvas.clientWidth;
+    canvas.height = this.canvas.clientHeight;
+    
+    img.onload = () => {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(blob => {
+        this.downloadBlob(blob, `图形组合_${Date.now()}.png`);
+      });
+    };
+    
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+  },
+  
+  downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  
+  createSVGElement(tag, attrs) {
+    const elem = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (let k in attrs) {
+      elem.setAttribute(k, attrs[k]);
+    }
+    return elem;
+  }
+};
+
+window.addEventListener('DOMContentLoaded', () => app.init());
+</script>
+</body>
+</html>
